@@ -11,7 +11,7 @@ export const FEED=[
 {id:'s5',role:'Barista',client:'Third Wave Coffee · Koramangala',when:'Mon 20 Oct · 8 am–4 pm',pay:'₹1,100',dist:'4.0 km',icon:'local_cafe',kind:'race',tags:[['bolt','2 spots left','warn']],cat:'day'},
 {id:'s4',role:'Event crew',client:'Palace Grounds · Diwali expo',when:'Fri 31 Oct · 4 pm–12 am',pay:'₹1,400',dist:'6.2 km',icon:'celebration',kind:'police',tags:[['trending_up','+₹200 festival bonus','ok'],['local_police','Police verification needed','bad']],cat:'evening'}];
 export const MINE=[
-{id:'m1',role:'Housekeeping',client:'Prestige Tech Park',when:'Today · 5:00–9:00 pm',status:'Check-in open',sev:'info',note:'Tower B, Whitefield. Check-in opens 30 min before start.',act:'Go to shift',icon:'login',day:true},
+{id:'m1',role:'Housekeeping',client:'Prestige Tech Park',when:'Today · 5:00–9:00 pm',status:'Check-in open',sev:'info',note:'Tower B, Whitefield. Check in by scanning the site QR, from 30 min before start.',act:'Go to shift',icon:'login',day:true},
 {id:'m2',role:'Store helper',client:'Decathlon Sarjapur',when:'Tue 21 Oct',status:'Cancelled by client',sev:'bad',note:'Cancelled 6 h before start. ₹200 compensation added to your wallet. Your score isn\'t affected.'},
 {id:'m0',role:'Waiter',client:'Toit Brewpub',when:'Thu 16 Oct',status:'Paid',sev:'ok',note:'6.0 h · ₹1,160 paid to UPI · you rated 5★'}];
 export const APPS=[
@@ -28,4 +28,4 @@ export const JOBS=[{id:'j1',title:'Senior data scientist',co:'Razorpay',loc:'Ben
 
 export const EXTRA_SHIFT={id:'sx',role:'Loader',client:'BigBasket · Mahadevapura',when:'Sun 19 Oct · 6 am–2 pm',pay:'₹900',dist:'12.8 km',icon:'local_shipping',kind:'far',tags:[['verified','Verified employer','ok']],cat:'day'};
 
-export const SCENARIOS=[['kyc','DigiLocker result',[['ok','Success'],['down','DigiLocker down'],['minor','Under 18']]],['selfie','Selfie liveness',[['ok','Pass'],['fail','Fails (low light)']]],['bank','Bank penny-drop',[['ok','Name matches'],['mismatch','Name mismatch']]],['geo','Location at shift',[['inside','Inside geofence'],['outside','420 m away']]],['payout','UPI payout',[['ok','Succeeds'],['fail','Bank down']]],['feed','Shift feed',[['ok','Shifts nearby'],['empty','None nearby']]]];
+export const SCENARIOS=[['kyc','DigiLocker result',[['ok','Success'],['down','DigiLocker down'],['minor','Under 18']]],['selfie','Selfie liveness',[['ok','Pass'],['fail','Fails (low light)']]],['bank','Bank penny-drop',[['ok','Name matches'],['mismatch','Name mismatch']]],['geo','Location at shift',[['inside','Inside geofence'],['outside','420 m away']]],['qr','Site QR scan',[['ok','Valid'],['expired','Expired code'],['wrong','Wrong site']]],['brk','Break set by client',[['30','30 min (default)'],['45','45 min'],['60','60 min']]],['payout','UPI payout',[['ok','Succeeds'],['fail','Bank down']]],['feed','Shift feed',[['ok','Shifts nearby'],['empty','None nearby']]]];

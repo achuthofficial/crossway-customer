@@ -5,7 +5,9 @@ import { animateNext, useApp } from '../store';
 import { C, T } from '../theme';
 import { Btn, FadeIn, Icon, Pop, Pulse, Tag, Tap } from '../components/ui';
 import { s, saveShift, shiftAction, ShiftHead, skipShift } from './Home';
-import { AnimatedCard, FlipList, Lottie, ReferralGraph, useMotion } from '../motion';
+import { AnimatedCard, FlipList, Lottie, ProgressRing, ReferralGraph, useMotion } from '../motion';
+import { QrScanner } from '../components/QrScanner';
+import { BREAK } from '../lib/checkinQr';
 import emptySaved from '../motion/lottie/empty-saved.json';
 
 const Header = ({ title, right }) => {
@@ -165,16 +167,22 @@ export function Refer() {
   );
 }
 
-/* ---------------- Shift day (check-in / check-out) ---------------- */
+/* ---------------- Shift day (QR check-in / breaks / QR check-out) ---------------- */
+const SITE = 'PTP-TB'; // Prestige Tech Park · Tower B (see src/lib/checkinQr.js)
+const SITE_NAME = 'Prestige Tech Park';
+const now = () => new Date().toTimeString().slice(0, 5);
+
 const STAGES = {
   pre: geoIn => (geoIn
-    ? ['info', 'my_location', "You're at the site", "You're 40 m from the entrance. Check in now; your shift starts at 5:00 pm."]
+    ? ['info', 'qr_code_scanner', "You're at the site", "You're 40 m from the entrance. Scan the CrossWay QR at the entrance to check in; your shift starts at 5:00 pm."]
     : ['warn', 'wrong_location', "You're 420 m away", "Move within 150 m of Tower B to check in. If you're already there, ask the supervisor to confirm you."]),
-  selfie: () => ['info', 'photo_camera', 'Take your check-in selfie', 'Look at the camera and blink.'],
-  in: () => ['ok', 'task_alt', 'Checked in at 4:52 pm', "Your shift runs to 9:00 pm. Check out before you leave so you're paid for every minute."],
-  offline: () => ['warn', 'cloud_off', 'Checked in offline', 'No signal here. Your check-in is saved on the phone with time and location and will sync automatically.'],
+  scanIn: () => ['info', 'qr_code_scanner', 'Scan the site QR', 'Point the camera at the QR on the screen at the entrance.'],
+  in: (_, a) => ['ok', 'task_alt', 'Checked in at ' + (a.inAt || '4:52 pm'), `${SITE_NAME} has been notified. Your shift runs to 9:00 pm. Scan the QR again on the way out so you're paid for every minute.`],
+  break: () => ['info', 'free_breakfast', 'On break', `${SITE_NAME} has been notified.`],
+  scanOut: () => ['info', 'qr_code_scanner', 'Scan to check out', 'Scan the same QR at the entrance on your way out.'],
+  offline: () => ['warn', 'cloud_off', 'Checked in offline', 'No signal here. The QR was checked on your phone; your check-in is saved with time and location and will sync automatically.'],
   super: () => ['info', 'supervisor_account', 'Waiting for supervisor', "Mr. Prakash got a request to confirm you're on site. This usually takes 2–3 minutes."],
-  done: () => ['ok', 'paid', 'Shift complete · ₹780', 'Checked out 9:02 pm. Paid tonight after the client approves your hours.'],
+  done: () => ['ok', 'paid', 'Shift complete · ₹780', `Checked out by QR. ${SITE_NAME} has been notified and approves your hours tonight; you're paid after that.`],
 };
 
 function MapCard({ geoIn }) {
@@ -204,22 +212,80 @@ function MapCard({ geoIn }) {
   );
 }
 
+/** Break timer: counts down the allowance the client set, and flags an overrun. */
+function BreakCard({ allowed }) {
+  const a = useApp();
+  const [, tick] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => tick(n => n + 1), 1000);
+    return () => clearInterval(t);
+  }, []);
+  // Demo: "+10 min" shifts the start back so the timer can be seen running out.
+  const usedMin = a.breakUsed + (a.breakStart ? (Date.now() - a.breakStart) / 60000 : 0);
+  const left = allowed - usedMin;
+  const over = left < 0;
+  const mm = v => Math.floor(Math.abs(v)) + ':' + String(Math.floor((Math.abs(v) % 1) * 60)).padStart(2, '0');
+  return (
+    <View style={{ marginHorizontal: 16, padding: 16, borderRadius: 20, backgroundColor: over ? T.bad[0] : C.surface2, flexDirection: 'row', gap: 16, alignItems: 'center' }}>
+      <ProgressRing value={Math.max(0, Math.min(1, left / allowed))} size={76} stroke={7} color={over ? C.danger : C.primary} label="Break time left">
+        <Text style={{ fontSize: 16, color: over ? T.bad[1] : C.text }}>{mm(left)}</Text>
+      </ProgressRing>
+      <View style={{ flex: 1, gap: 4 }}>
+        <Text style={{ fontSize: 16, fontWeight: '500', color: over ? T.bad[1] : C.text }}>{over ? mm(left) + ' over your break' : 'Break: ' + mm(left) + ' left'}</Text>
+        <Text style={{ fontSize: 13, lineHeight: 18, color: over ? T.bad[1] : C.muted }}>
+          {over ? `${SITE_NAME} allows ${allowed} min and has been told. Head back and end your break.` : `${allowed} min allowed by ${SITE_NAME}.`}
+        </Text>
+        <Tap onPress={() => a.setBreakStart(t => (t || Date.now()) - 10 * 60000)} accessibilityLabel="Demo: skip ahead 10 minutes">
+          <Text style={{ fontSize: 12, color: C.primary }}>Demo: +10 min</Text>
+        </Tap>
+      </View>
+    </View>
+  );
+}
+
 export function Day() {
   const a = useApp();
   const geoIn = a.sc.geo === 'inside';
   const st = a.dayStage;
-  const [sv, icon, title, text] = STAGES[st](geoIn);
+  const allowed = parseInt(a.sc.brk, 10) || BREAK.defaultMin;
+  const [sv, icon, title, text] = (STAGES[st] || STAGES.pre)(geoIn, a);
   const go = next => { animateNext(); a.setDayStage(next); };
+
+  const checkedIn = () => {
+    a.setInAt(now());
+    a.setBreakUsed(0);
+    a.setBreakStart(null);
+    go(a.offline ? 'offline' : 'in');
+    a.say(a.offline ? "Checked in offline. It'll sync when you're back online." : `Checked in at ${now()}. ${SITE_NAME} has been notified.`);
+  };
+  const checkedOut = () => {
+    go('done');
+    a.say(`Checked out at ${now()}. ${SITE_NAME} has been notified.`);
+    a.setSheet({ kind: 'rate' });
+  };
+  const startBreak = () => {
+    a.setBreakStart(Date.now());
+    go('break');
+    a.say(`Break started · ${allowed} min. ${SITE_NAME} has been notified.`);
+  };
+  const endBreak = () => {
+    const used = a.breakUsed + (Date.now() - a.breakStart) / 60000;
+    a.setBreakUsed(used);
+    a.setBreakStart(null);
+    go('in');
+    a.say(used > allowed ? `Break ended ${Math.round(used - allowed)} min over. ${SITE_NAME} has been notified.` : `Welcome back. ${Math.max(0, Math.round(allowed - used))} min of break left today.`);
+  };
 
   const actions = [];
   if (st === 'pre') {
-    if (geoIn) actions.push(['Check in', 'login', 'p', () => go('selfie')]);
+    if (geoIn) actions.push(['Scan site QR to check in', 'qr_code_scanner', 'p', () => go('scanIn')]);
     else {
       actions.push(["I'm here: ask supervisor", 'supervisor_account', 'p', () => {
         go('super');
         a.later(() => {
           if (a.dayRef.current !== 'super') return;
           animateNext();
+          a.setInAt(now());
           a.setDayStage('in');
           a.say("Supervisor confirmed. You're checked in.");
         }, 2500);
@@ -228,39 +294,59 @@ export function Day() {
     }
     actions.push(['Running late', 'schedule', 'o', () => a.say("Site told you're 15 min late. Shift is held for you.")]);
   }
-  if (st === 'selfie') actions.push(['Take selfie', 'photo_camera', 'p', () => go(a.offline ? 'offline' : 'in')]);
-  if (st === 'in' || st === 'offline') actions.push(['Check out', 'logout', 'p', () => { go('done'); a.setSheet({ kind: 'rate' }); }]);
+  if (st === 'in' || st === 'offline') {
+    const leftMin = Math.max(0, Math.round(allowed - a.breakUsed));
+    if (leftMin > 0) actions.push([`Start break · ${leftMin} min`, 'free_breakfast', 't', startBreak]);
+    actions.push(['Scan QR to check out', 'logout', 'p', () => go('scanOut')]);
+  }
+  if (st === 'break') actions.push(['End break', 'work', 'p', endBreak]);
   if (st === 'done')
     actions.push(['Back to my shifts', 'arrow_back', 'p', () => {
       a.setMine(l => l.map(m => (m.id === 'm1' ? { ...m, status: 'Done · awaiting approval', sev: 'warn', note: '4.0 h · ₹780 · paid tonight', act: null, day: false } : m)));
       a.goTab('shifts');
     }]);
 
+  const scanning = st === 'scanIn' || st === 'scanOut';
   return (
-    <ScrollView contentContainerStyle={{ gap: 14, paddingBottom: 24 }}>
+    <ScrollView contentContainerStyle={{ gap: 14, paddingBottom: 24 }} keyboardShouldPersistTaps="handled">
       <Header title="Today's shift" />
-      {!a.lowData && <MapCard geoIn={geoIn} />}
+      {!a.lowData && !scanning && <MapCard geoIn={geoIn} />}
       <View style={{ paddingHorizontal: 16, gap: 4 }}>
-        <Text style={{ fontSize: 20, color: C.text }}>Housekeeping · Prestige Tech Park</Text>
+        <Text style={{ fontSize: 20, color: C.text }}>Housekeeping · {SITE_NAME}</Text>
         <Text style={s.meta}>Tower B, Whitefield · 5:00–9:00 pm · ₹780</Text>
-        <Text style={s.meta}>Supervisor: Mr. Prakash · masked call</Text>
+        <Text style={s.meta}>Supervisor: Mr. Prakash · masked call · break {allowed} min</Text>
       </View>
-      <View style={{ flexDirection: 'row', gap: 8, paddingHorizontal: 16 }}>
-        <Btn label="Directions" icon="directions" kind="o" height={48} full={false} style={{ flex: 1, paddingHorizontal: 14 }} onPress={() => a.say('Opening Google Maps: 11 min by bike.')} />
-        <Btn label="Call site" icon="call" kind="o" height={48} full={false} style={{ flex: 1, paddingHorizontal: 14 }} onPress={() => a.say('Calling the site through a masked number…')} />
-        <Btn label="SOS" kind="d" height={48} full={false} style={{ paddingHorizontal: 18 }} onPress={() => a.setSheet({ kind: 'sos' })} />
-      </View>
-      <FadeIn key={st + geoIn} style={{ marginHorizontal: 16, padding: 16, borderRadius: 20, backgroundColor: T[sv][0], flexDirection: 'row', gap: 12 }}>
-        <Pop key={icon}><Icon name={icon} color={T[sv][1]} /></Pop>
-        <View style={{ flex: 1, gap: 4 }}>
-          <Text style={{ fontSize: 16, fontWeight: '500', color: T[sv][1] }}>{title}</Text>
-          <Text style={{ fontSize: 14, lineHeight: 20, color: T[sv][1] }}>{text}</Text>
+      {!scanning && (
+        <View style={{ flexDirection: 'row', gap: 8, paddingHorizontal: 16 }}>
+          <Btn label="Directions" icon="directions" kind="o" height={48} full={false} style={{ flex: 1, paddingHorizontal: 14 }} onPress={() => a.say('Opening Google Maps: 11 min by bike.')} />
+          <Btn label="Call site" icon="call" kind="o" height={48} full={false} style={{ flex: 1, paddingHorizontal: 14 }} onPress={() => a.say('Calling the site through a masked number…')} />
+          <Btn label="SOS" kind="d" height={48} full={false} style={{ paddingHorizontal: 18 }} onPress={() => a.setSheet({ kind: 'sos' })} />
         </View>
-      </FadeIn>
+      )}
+      {scanning ? (
+        <FadeIn style={{ paddingHorizontal: 16 }}>
+          <QrScanner
+            site={SITE}
+            demo={a.sc.qr}
+            title={st === 'scanIn' ? 'Scan the site QR to check in' : 'Scan the site QR to check out'}
+            onVerified={() => (st === 'scanIn' ? checkedIn() : checkedOut())}
+            onCancel={() => go(st === 'scanIn' ? 'pre' : 'in')}
+          />
+        </FadeIn>
+      ) : (
+        <FadeIn key={st + geoIn} style={{ marginHorizontal: 16, padding: 16, borderRadius: 20, backgroundColor: T[sv][0], flexDirection: 'row', gap: 12 }}>
+          <Pop key={icon}><Icon name={icon} color={T[sv][1]} /></Pop>
+          <View style={{ flex: 1, gap: 4 }}>
+            <Text style={{ fontSize: 16, fontWeight: '500', color: T[sv][1] }}>{title}</Text>
+            <Text style={{ fontSize: 14, lineHeight: 20, color: T[sv][1] }}>{text}</Text>
+          </View>
+        </FadeIn>
+      )}
+      {st === 'break' && <BreakCard allowed={allowed} />}
       {st === 'offline' && (
         <FadeIn style={{ marginHorizontal: 16, padding: 16, borderRadius: 20, borderWidth: 1, borderStyle: 'dashed', borderColor: C.outline, flexDirection: 'row', gap: 14, alignItems: 'center' }}>
           <Icon name="qr_code_2" size={72} />
-          <Text style={{ flex: 1, fontSize: 13, lineHeight: 19, color: C.muted }}>Offline ticket · SH-4075 · 4:52 pm. Show this to the supervisor. It syncs when you're online.</Text>
+          <Text style={{ flex: 1, fontSize: 13, lineHeight: 19, color: C.muted }}>Offline ticket · SH-4075 · {a.inAt || '4:52 pm'}. Show this to the supervisor. It syncs when you're online.</Text>
         </FadeIn>
       )}
       <View style={{ paddingHorizontal: 16, gap: 8 }}>
@@ -362,7 +448,10 @@ function edges(a) {
     ['M5', 'Shift taken seconds before you', () => go({ tab: 'home', filter: 'all', feed: FEED }, { feed: 'ok' })],
     ['M5', 'Police verification required', () => go({ tab: 'home', filter: 'evening' }, { feed: 'ok' })],
     ['M6', 'Check-in outside geofence → supervisor confirm', () => go({ sub: 'day', dayStage: 'pre' }, { geo: 'outside' })],
-    ['M6', 'Offline check-in → offline ticket', () => go({ sub: 'day', dayStage: 'selfie', offline: true }, { geo: 'inside' })],
+    ['M6', 'Offline check-in → offline ticket', () => go({ sub: 'day', dayStage: 'scanIn', offline: true }, { geo: 'inside', qr: 'ok' })],
+    ['M6', 'Site QR expired → scan the live code', () => go({ sub: 'day', dayStage: 'scanIn' }, { geo: 'inside', qr: 'expired' })],
+    ['M6', 'QR from a different site', () => go({ sub: 'day', dayStage: 'scanIn' }, { geo: 'inside', qr: 'wrong' })],
+    ['M6', 'Break the client lengthened to 45 min; overrun', () => go({ sub: 'day', dayStage: 'in' }, { geo: 'inside', qr: 'ok', brk: '45' })],
     ['M6', 'SOS', () => go({ sub: 'day', sheet: { kind: 'sos' } })],
     ['M6', 'Client cancelled shift → compensation', () => go({ tab: 'shifts' })],
     ['M7', 'Withdraw below ₹100 / above balance', () => go({ tab: 'wallet', payAmt: '50' })],

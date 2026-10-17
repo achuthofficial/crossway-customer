@@ -26,7 +26,14 @@
       "bundler": "metro"
     },
     "plugins": [
-      "expo-font"
+      "expo-font",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "CrossWay uses the camera to scan the site QR when you check in and out of a shift.",
+          "recordAudioAndroid": false
+        }
+      ]
     ]
   }
 }
