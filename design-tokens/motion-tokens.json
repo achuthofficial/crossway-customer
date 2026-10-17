@@ -1,0 +1,83 @@
+{
+  "version": "1.0.0",
+  "description": "CrossWay motion + shape + colour seed tokens. Single source of truth for the candidate app, client web app and admin web app. Edit this file, then run `node design-tokens/build.mjs` to regenerate tokens.ts, tokens.css, MotionTokens.kt and color-tokens.json.",
+  "springs": {
+    "_note": "Material 3 MotionScheme values. dampingRatio < 1 overshoots (spatial only). Effects springs are critically damped (ratio 1) and never overshoot. mass is 1.",
+    "expressive": {
+      "spatial": {
+        "fast":    { "dampingRatio": 0.6, "stiffness": 800 },
+        "default": { "dampingRatio": 0.8, "stiffness": 380 },
+        "slow":    { "dampingRatio": 0.8, "stiffness": 200 }
+      },
+      "effects": {
+        "fast":    { "dampingRatio": 1.0, "stiffness": 3800 },
+        "default": { "dampingRatio": 1.0, "stiffness": 1600 },
+        "slow":    { "dampingRatio": 1.0, "stiffness": 800 }
+      }
+    },
+    "standard": {
+      "spatial": {
+        "fast":    { "dampingRatio": 0.9, "stiffness": 1400 },
+        "default": { "dampingRatio": 0.9, "stiffness": 700 },
+        "slow":    { "dampingRatio": 0.9, "stiffness": 300 }
+      },
+      "effects": {
+        "fast":    { "dampingRatio": 1.0, "stiffness": 3800 },
+        "default": { "dampingRatio": 1.0, "stiffness": 1600 },
+        "slow":    { "dampingRatio": 1.0, "stiffness": 800 }
+      }
+    }
+  },
+  "schemeByProduct": {
+    "_note": "Brand feel: bold on mobile, confident on client web, quiet on admin.",
+    "candidate": "expressive",
+    "client": "expressive",
+    "admin": "standard"
+  },
+  "duration": {
+    "_note": "Fallback (non-spring) durations in ms, for CSS transitions, reduced motion and platforms without springs.",
+    "short":  { "min": 100, "max": 200, "value": 150 },
+    "medium": { "min": 250, "max": 400, "value": 300 },
+    "long":   { "min": 450, "max": 600, "value": 500 },
+    "adminMax": 300
+  },
+  "easing": {
+    "standard": [0.2, 0.0, 0.0, 1.0],
+    "emphasizedDecelerate": [0.05, 0.7, 0.1, 1.0],
+    "emphasizedAccelerate": [0.3, 0.0, 0.8, 0.15],
+    "linear": [0, 0, 1, 1]
+  },
+  "stagger": { "interval": 40, "min": 30, "max": 50, "maxItems": 8 },
+  "shape": {
+    "corner": {
+      "none": 0, "extraSmall": 4, "small": 8, "medium": 12, "large": 16, "largeIncreased": 20,
+      "extraLarge": 28, "extraLargeIncreased": 32, "extraExtraLarge": 48, "full": 9999
+    },
+    "morph": {
+      "_note": "Polar shapes for morphing: radius(θ) is sampled at `samples` points so any two shapes interpolate point-by-point.",
+      "samples": 96,
+      "targets": {
+        "circle":   { "kind": "lobed", "lobes": 0, "amplitude": 0 },
+        "cookie4":  { "kind": "lobed", "lobes": 4, "amplitude": 0.12 },
+        "cookie9":  { "kind": "lobed", "lobes": 9, "amplitude": 0.07 },
+        "clover4":  { "kind": "lobed", "lobes": 4, "amplitude": 0.2, "sharpness": 0.7 },
+        "softBurst":{ "kind": "lobed", "lobes": 10, "amplitude": 0.07, "sharpness": 0.8 },
+        "squircle": { "kind": "superellipse", "exponent": 4 },
+        "pill":     { "kind": "stadium", "aspect": 0.62 }
+      },
+      "loadingSequence": ["cookie9", "clover4", "pill", "softBurst", "squircle", "cookie4"],
+      "states": { "idle": "pill", "loading": "cookie9", "selected": "squircle", "success": "circle" }
+    }
+  },
+  "color": {
+    "seed": "#0B57D0",
+    "variant": "fidelity",
+    "custom": { "success": "#34A853", "warning": "#FBBC04" },
+    "brand": ["#0B57D0", "#34A853", "#FBBC04", "#EA4335", "#A8C7FA"]
+  },
+  "accessibility": {
+    "maxFlashesPerSecond": 3,
+    "maxAutoplayLoopMs": 5000,
+    "emptyStateLoopMs": 2400
+  }
+}
