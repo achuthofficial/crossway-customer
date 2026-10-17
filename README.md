@@ -30,6 +30,23 @@ Prototype codes: OTP `123456`.
 - **Demo controls** (More → Demo controls): switch scenarios (DigiLocker down, selfie fails, bank mismatch, outside the
   geofence, payout failure, empty feed) and jump to any of the 26 edge cases.
 
+## QR check-in, breaks and check-out
+
+On **Today's shift**, the worker scans the site's CrossWay QR at the entrance to check in (expo-camera), takes a break
+from the app, and scans again to check out. The client is notified at each step.
+
+- **Rotating QR:** the client portal shows a QR that changes every 30 s. Each payload is signed and time-boxed, so a
+  photo of it is useless a minute later. The app rejects expired codes, codes from another site and edited codes,
+  and says why.
+- **Fallback code:** the 6-digit code under the QR works when the camera is denied or unavailable.
+- **Offline:** QRs are checked on the phone, so check-in works with no signal and syncs later.
+- **Breaks:** the allowance the client set for the site (30 min by default, longer if the client chooses) counts down
+  on a ring. An overrun is shown to the worker and reported to the client.
+- **Demo controls:** "Site QR scan" (valid / expired / wrong site) and "Break set by client" (30 / 45 / 60), plus
+  four new edge cases.
+- **Shared code:** the QR format lives in `src/lib/checkinQr.js`, identical to the copy in crossway-client. Without
+  a backend it signs with a demo key; production should issue and verify codes server-side with HMAC.
+
 ## Motion (Material 3 Expressive)
 
 All motion uses spring tokens from `design-tokens/` (shared with the web apps) through the TypeScript library in

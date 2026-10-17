@@ -21,7 +21,7 @@ export const animateNext = () =>
 const Ctx = createContext(null);
 export const useApp = () => useContext(Ctx);
 
-const INITIAL_SC = { kyc: 'ok', selfie: 'ok', bank: 'ok', geo: 'inside', payout: 'ok', feed: 'ok' };
+const INITIAL_SC = { kyc: 'ok', selfie: 'ok', bank: 'ok', geo: 'inside', qr: 'ok', brk: '30', payout: 'ok', feed: 'ok' };
 
 export function AppProvider({ children }) {
   // Navigation: onboarding screens, then the tabbed app with optional sub-page.
@@ -72,6 +72,10 @@ export function AppProvider({ children }) {
   const [profileDone, setProfileDone] = useState(['kyc', 'bank', 'photo']); // Passport completeness items
   const [badgeOpen, setBadgeOpen] = useState(false);
   const [refs, setRefs] = useState(2); // referrals this week (leaderboard)
+  // Shift day: when the current break started (ms), break minutes used so far, and check-in time.
+  const [breakStart, setBreakStart] = useState(null);
+  const [breakUsed, setBreakUsed] = useState(0);
+  const [inAt, setInAt] = useState(null);
 
   // Live values for timeouts that must check state at fire time.
   const sheetRef = useRef(null);
@@ -96,7 +100,7 @@ export function AppProvider({ children }) {
 
   const setSc = (k, v) => {
     setScState(s => ({ ...s, [k]: v }));
-    if (k === 'geo') setDayStage('pre');
+    if (k === 'geo' || k === 'qr') setDayStage('pre');
     if (k === 'feed') setRadius(5);
   };
 
@@ -113,12 +117,14 @@ export function AppProvider({ children }) {
     setOffline(false);
     setScreen('app');
     setScState(s => ({ ...s, ...scPatch }));
+    setBreakStart(null);
+    setBreakUsed(0);
     const setters = {
       screen: setScreen, sub: setSub, tab: setTab, mode: setMode, lang: setLang, lowData: setLowData, offline: setOffline,
       phone: setPhone, otp: setOtp, otpTries: setOtpTries, otpMsg: setOtpMsg, resendAt: setResendAt, consent: setConsent,
       kycStep: setKycStep, selfieTries: setSelfieTries, selfieErr: setSelfieErr, upi: setUpi, bankStep: setBankStep,
       radius: setRadius, filter: setFilter, feed: setFeed, dayStage: setDayStage, payAmt: setPayAmt, ewaAmt: setEwaAmt, sheet: setSheet,
-      saved: setSaved, jobId: setJobId,
+      saved: setSaved, jobId: setJobId, breakStart: setBreakStart, breakUsed: setBreakUsed,
     };
     Object.entries(p).forEach(([k, v]) => setters[k]?.(v));
   };
@@ -135,7 +141,7 @@ export function AppProvider({ children }) {
     dayStage, setDayStage, bal, setBal, ewaTaken, setEwaTaken, payAmt, setPayAmt, ewaAmt, setEwaAmt,
     txns, setTxns, rating, setRating, relAppeal, setRelAppeal, sheet, setSheet, sheetRef, dayRef, toast, say, later, scenario,
     saved, setSaved, jobId, setJobId, refreshing, setRefreshing, profileDone, setProfileDone, badgeOpen, setBadgeOpen, refs, setRefs,
-    backRef, back,
+    backRef, back, breakStart, setBreakStart, breakUsed, setBreakUsed, inAt, setInAt,
   };
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
