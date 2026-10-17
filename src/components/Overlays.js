@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import { Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 import { animateNext, useApp } from '../store';
 import { C } from '../theme';
-import { Btn, Icon, ND, Pop, Pulse, Tap } from './ui';
+import { Btn, Icon, Pop, Pulse } from './ui';
+import { MorphButton, MorphNavBar, SuccessBurst, useMotion } from '../motion';
 
 /** Build the content of the current bottom sheet from app state. */
 function useSheetContent() {
@@ -18,16 +19,16 @@ function useSheetContent() {
         title: x.role + ' · ' + x.client,
         body: x.when,
         rows: [['You get', x.pay + ' (paid next day)'], ['Fee', '₹0 · always free'], ['Cancel', 'Free until 12 h before']],
-        actions: [
-          ['Confirm shift', 'p', () => {
-            animateNext();
-            a.setFeed(f => f.map(y => (y.id === x.id ? { ...y, taken: true } : y)));
-            a.setMine(m => [{ id: 'n' + x.id, role: x.role, client: x.client.split(' · ')[0], when: x.when, status: 'Confirmed', sev: 'ok', note: 'Reminder the evening before and 2 h before start.' }, ...m]);
-            close();
-            a.say('Shift confirmed. Directions and reminders are in My shifts.');
-          }],
-          ['Not now', 'o', close],
-        ],
+        // Confirm morphs pill → loading → check, bursts confetti, then the sheet closes.
+        morph: ['Confirm shift', 'Shift confirmed', () => {
+          animateNext();
+          a.setFeed(f => f.map(y => (y.id === x.id ? { ...y, taken: true } : y)));
+          a.setMine(m => [{ id: 'n' + x.id, role: x.role, client: x.client.split(' · ')[0], when: x.when, status: 'Confirmed', sev: 'ok', note: 'Reminder the evening before and 2 h before start.' }, ...m]);
+          if (a.sub === 'job') a.setSub(null);
+          close();
+          a.say('Shift confirmed. Directions and reminders are in My shifts.');
+        }],
+        actions: [['Not now', 'o', close]],
       };
     }
     case 'race':
@@ -86,12 +87,13 @@ function useSheetContent() {
 
 function Star({ n }) {
   const a = useApp();
+  const mo = useMotion();
   const on = n <= a.rating;
   const sc = useRef(new Animated.Value(1)).current;
   const press = () => {
     a.setRating(n);
     sc.setValue(0.4);
-    Animated.spring(sc, { toValue: 1, useNativeDriver: ND, speed: 14, bounciness: 18 }).start();
+    mo.to(sc, 1, { speed: 'fast' }).start();
   };
   return (
     <Pressable onPress={press} accessibilityLabel={n + ' star'} style={{ width: 48, height: 48, alignItems: 'center', justifyContent: 'center' }}>
@@ -102,9 +104,31 @@ function Star({ n }) {
   );
 }
 
+/** Confirm button for a sheet: idle → loading (900 ms) → success + confetti → commit. */
+function MorphAction({ label, done, onCommit }) {
+  const a = useApp();
+  const [state, setState] = useState('idle');
+  const [burst, setBurst] = useState(0);
+  const press = () => {
+    setState('loading');
+    a.later(() => {
+      setState('success');
+      setBurst(Date.now());
+      a.later(onCommit, 900);
+    }, 900);
+  };
+  return (
+    <View style={{ alignItems: 'center', paddingBottom: state === 'success' ? 22 : 0 }}>
+      <MorphButton state={state} label={label} successLabel={done} onPress={press} color={C.primary} height={56} />
+      <SuccessBurst trigger={burst} style={{ left: '50%', top: 28 }} />
+    </View>
+  );
+}
+
 /** Bottom sheet that slides up over a dimmed backdrop and slides away on close. */
 export function Sheet() {
   const a = useApp();
+  const mo = useMotion();
   const live = useSheetContent();
   const [content, setContent] = useState(null);
   const v = useRef(new Animated.Value(0)).current;
@@ -112,9 +136,9 @@ export function Sheet() {
   useEffect(() => {
     if (live) {
       setContent(live);
-      Animated.spring(v, { toValue: 1, useNativeDriver: ND, speed: 16, bounciness: 4 }).start();
+      mo.to(v, 1).start();
     } else if (content) {
-      Animated.timing(v, { toValue: 0, duration: 200, easing: Easing.in(Easing.cubic), useNativeDriver: ND }).start(() => setContent(null));
+      mo.to(v, 0, { speed: 'fast' }).start(() => setContent(null));
     }
   }, [a.sheet, a.rating]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -122,7 +146,7 @@ export function Sheet() {
   if (!c) return null;
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents={live ? 'auto' : 'none'}>
-      <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,.32)', opacity: v }]}>
+      <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,.32)', opacity: v.interpolate({ inputRange: [0, 1], outputRange: [0, 1], extrapolate: 'clamp' }) }]}>
         <Pressable style={{ flex: 1 }} onPress={() => a.setSheet(null)} accessibilityLabel="Close" />
       </Animated.View>
       <Animated.View style={[st.sheet, { transform: [{ translateY: v.interpolate({ inputRange: [0, 1], outputRange: [500, 0] }) }] }]}>
@@ -148,6 +172,7 @@ export function Sheet() {
             <Text style={{ flex: 1, fontSize: 18, color: C.text }}>{c.listen}</Text>
           </View>
         )}
+        {c.morph && <MorphAction key={a.sheet?.id} label={c.morph[0]} done={c.morph[1]} onCommit={c.morph[2]} />}
         {c.actions.map(([l, k, on]) => <Btn key={l} label={l} kind={k} onPress={on} />)}
       </Animated.View>
     </View>
@@ -157,23 +182,24 @@ export function Sheet() {
 /** Snackbar that slides up above the tab bar. */
 export function Toast() {
   const { toast } = useApp();
+  const mo = useMotion();
   const [msg, setMsg] = useState(null);
   const v = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     if (toast) {
       setMsg(toast.msg);
       v.setValue(0);
-      Animated.spring(v, { toValue: 1, useNativeDriver: ND, speed: 16, bounciness: 6 }).start();
+      mo.to(v, 1, { speed: 'fast' }).start();
     } else {
-      Animated.timing(v, { toValue: 0, duration: 180, useNativeDriver: ND }).start(() => setMsg(null));
+      mo.to(v, 0, { kind: 'effects', speed: 'fast' }).start(() => setMsg(null));
     }
-  }, [toast, v]);
+  }, [toast, v]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!msg) return null;
   return (
     <Animated.View
       pointerEvents="none"
       accessibilityLiveRegion="polite"
-      style={[st.toast, { opacity: v, transform: [{ translateY: v.interpolate({ inputRange: [0, 1], outputRange: [30, 0] }) }] }]}
+      style={[st.toast, { opacity: v.interpolate({ inputRange: [0, 1], outputRange: [0, 1], extrapolate: 'clamp' }), transform: [{ translateY: v.interpolate({ inputRange: [0, 1], outputRange: [30, 0] }) }] }]}
     >
       <Icon name="check_circle" size={20} color="#A8C7FA" />
       <Text style={{ flex: 1, color: '#F2F2F2', fontSize: 14, lineHeight: 20 }}>{msg}</Text>
@@ -181,38 +207,22 @@ export function Toast() {
   );
 }
 
-/** Material 3 navigation bar with a sliding active indicator. */
+/** Material 3 navigation bar: stretching indicator pill, outlined → filled icons with a bounce. */
 export function TabBar() {
   const a = useApp();
   const work = a.mode === 'work';
-  const tabs = work
-    ? [['home', 'home', a.t.home], ['shifts', 'work_history', a.t.shifts], ['wallet', 'account_balance_wallet', a.t.wallet], ['passport', 'badge', a.t.passport], ['more', 'menu', a.t.more]]
-    : [['home', 'search', 'Jobs'], ['apps', 'assignment', 'Applied'], ['wallet', 'account_balance_wallet', 'Wallet'], ['passport', 'badge', 'Passport'], ['more', 'menu', 'More']];
-  const activeTab = work && a.tab === 'apps' ? 'shifts' : !work && a.tab === 'shifts' ? 'apps' : a.tab;
-  const idx = Math.max(0, tabs.findIndex(t => t[0] === activeTab));
-  const [w, setW] = useState(0);
-  const x = useRef(new Animated.Value(idx)).current;
-  useEffect(() => {
-    Animated.spring(x, { toValue: idx, useNativeDriver: ND, speed: 18, bounciness: 6 }).start();
-  }, [idx, x]);
-  const cell = w / tabs.length;
+  const items = work
+    ? [{ id: 'home', icon: 'home', label: a.t.home }, { id: 'shifts', icon: 'briefcase-clock', label: a.t.shifts }, { id: 'wallet', icon: 'wallet', label: a.t.wallet }, { id: 'passport', icon: 'card-account-details', label: a.t.passport }, { id: 'more', icon: 'dots-horizontal-circle', label: a.t.more }]
+    : [{ id: 'home', icon: 'briefcase-search', label: 'Jobs' }, { id: 'apps', icon: 'clipboard-text', label: 'Applied' }, { id: 'wallet', icon: 'wallet', label: 'Wallet' }, { id: 'passport', icon: 'card-account-details', label: 'Passport' }, { id: 'more', icon: 'dots-horizontal-circle', label: 'More' }];
+  const active = work && a.tab === 'apps' ? 'shifts' : !work && a.tab === 'shifts' ? 'apps' : a.tab;
   return (
-    <View style={st.nav} onLayout={e => setW(e.nativeEvent.layout.width - 8)}>
-      {w > 0 && !a.sub && (
-        <Animated.View style={[st.pill, { left: 4 + (cell - 64) / 2, transform: [{ translateX: x.interpolate({ inputRange: [0, 1], outputRange: [0, cell] }) }] }]} />
-      )}
-      {tabs.map(([id, icon, label]) => {
-        const on = activeTab === id && !a.sub;
-        return (
-          <Tap key={id} scaleTo={0.9} style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 4, height: 80 }} onPress={() => a.goTab(id)} accessibilityLabel={label}>
-            <View style={{ width: 64, height: 32, alignItems: 'center', justifyContent: 'center' }}>
-              <Icon name={icon} color={on ? C.primaryDark : C.muted} />
-            </View>
-            <Text numberOfLines={1} style={{ fontSize: 12, fontWeight: on ? '600' : '500', color: C.text }}>{label}</Text>
-          </Tap>
-        );
-      })}
-    </View>
+    <MorphNavBar
+      items={items}
+      active={active}
+      showIndicator={!a.sub}
+      onChange={a.goTab}
+      colors={{ bg: C.surface2, pill: C.primarySoft, icon: C.muted, iconActive: C.primaryDark, text: C.text }}
+    />
   );
 }
 
@@ -220,6 +230,4 @@ export const st = StyleSheet.create({
   sheet: { position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: '#fff', borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingTop: 12, paddingHorizontal: 20, paddingBottom: 28, gap: 14, maxHeight: '86%' },
   grabber: { alignSelf: 'center', width: 32, height: 4, borderRadius: 2, backgroundColor: '#C4C7C5' },
   toast: { position: 'absolute', left: 12, right: 12, bottom: 92, backgroundColor: '#303030', borderRadius: 8, paddingVertical: 14, paddingHorizontal: 16, flexDirection: 'row', gap: 12, alignItems: 'center' },
-  nav: { height: 80, backgroundColor: C.surface2, flexDirection: 'row', paddingHorizontal: 4 },
-  pill: { position: 'absolute', top: 12, width: 64, height: 32, borderRadius: 16, backgroundColor: C.primarySoft },
 });

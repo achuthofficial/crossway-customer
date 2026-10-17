@@ -6,8 +6,17 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
-/** Animate the next layout change (list items added/removed, sections toggled). */
-export const animateNext = () => LayoutAnimation.configureNext(LayoutAnimation.create(240, 'easeInEaseOut', 'opacity'));
+/**
+ * Animate the next layout change (list items added/removed, sections toggled): new items fade
+ * in, neighbours spring into their new places (damping 0.8, the expressive default ratio).
+ */
+export const animateNext = () =>
+  LayoutAnimation.configureNext({
+    duration: 300,
+    create: { type: 'easeInEaseOut', property: 'opacity' },
+    update: { type: 'spring', springDamping: 0.8 },
+    delete: { type: 'easeInEaseOut', property: 'opacity', duration: 150 },
+  });
 
 const Ctx = createContext(null);
 export const useApp = () => useContext(Ctx);
@@ -57,6 +66,12 @@ export function AppProvider({ children }) {
   const [relAppeal, setRelAppeal] = useState(false);
   const [sheet, setSheet] = useState(null);
   const [toast, setToast] = useState(null);
+  const [saved, setSaved] = useState([]); // shift ids saved with a right swipe
+  const [jobId, setJobId] = useState(null); // shift open in the job detail page
+  const [refreshing, setRefreshing] = useState(false);
+  const [profileDone, setProfileDone] = useState(['kyc', 'bank', 'photo']); // Passport completeness items
+  const [badgeOpen, setBadgeOpen] = useState(false);
+  const [refs, setRefs] = useState(2); // referrals this week (leaderboard)
 
   // Live values for timeouts that must check state at fire time.
   const sheetRef = useRef(null);
@@ -86,6 +101,9 @@ export function AppProvider({ children }) {
   };
 
   const goTab = id => { setTab(id); setSub(null); };
+  // App.js installs the animated back (container transform / slide-out); plain close as fallback.
+  const backRef = useRef(null);
+  const back = () => (backRef.current ? backRef.current() : setSub(null));
 
   /** Jump straight to a scenario; used by the demo controls' edge-case list. */
   const scenario = (p = {}, scPatch = {}) => {
@@ -100,6 +118,7 @@ export function AppProvider({ children }) {
       phone: setPhone, otp: setOtp, otpTries: setOtpTries, otpMsg: setOtpMsg, resendAt: setResendAt, consent: setConsent,
       kycStep: setKycStep, selfieTries: setSelfieTries, selfieErr: setSelfieErr, upi: setUpi, bankStep: setBankStep,
       radius: setRadius, filter: setFilter, feed: setFeed, dayStage: setDayStage, payAmt: setPayAmt, ewaAmt: setEwaAmt, sheet: setSheet,
+      saved: setSaved, jobId: setJobId,
     };
     Object.entries(p).forEach(([k, v]) => setters[k]?.(v));
   };
@@ -115,6 +134,8 @@ export function AppProvider({ children }) {
     avail, setAvail, radius, setRadius, filter, setFilter, feed, setFeed, mine, setMine, apps, setApps,
     dayStage, setDayStage, bal, setBal, ewaTaken, setEwaTaken, payAmt, setPayAmt, ewaAmt, setEwaAmt,
     txns, setTxns, rating, setRating, relAppeal, setRelAppeal, sheet, setSheet, sheetRef, dayRef, toast, say, later, scenario,
+    saved, setSaved, jobId, setJobId, refreshing, setRefreshing, profileDone, setProfileDone, badgeOpen, setBadgeOpen, refs, setRefs,
+    backRef, back,
   };
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

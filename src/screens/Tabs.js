@@ -1,9 +1,9 @@
-import { useEffect, useRef } from 'react';
-import { Animated, Easing, ScrollView, Text, TextInput, View } from 'react-native';
+import { ScrollView, Text, TextInput, View } from 'react-native';
 import { ini, inr, LANGS } from '../data';
 import { animateNext, useApp } from '../store';
 import { C, T } from '../theme';
-import { Bar, Btn, CountUp, FadeIn, H1, Icon, ND, Pop, Tag, Tap } from '../components/ui';
+import { Bar, Btn, CountUp, FadeIn, H1, Icon, Pop, Tag, Tap } from '../components/ui';
+import { BadgeFlip, ProgressRing, SuccessBurst } from '../motion';
 import { s } from './Home';
 
 /* ---------------- My shifts ---------------- */
@@ -13,7 +13,7 @@ export function Shifts() {
     <ScrollView contentContainerStyle={[s.page, { gap: 14 }]}>
       <H1 style={{ fontSize: 24, marginTop: 4 }}>{a.t.shifts}</H1>
       {a.mine.map((m, i) => (
-        <FadeIn key={m.id} delay={i * 70} style={[s.card, { borderWidth: 0, backgroundColor: m.day ? C.primarySoft : C.surface2, gap: 10 }]}>
+        <FadeIn key={m.id} delay={i * 40} style={[s.card, { borderWidth: 0, backgroundColor: m.day ? C.primarySoft : C.surface2, gap: 10 }]}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 8 }}>
             <Text style={{ fontSize: 13, color: C.muted }}>{m.when}</Text>
             <Tag sev={m.sev}>{m.status}</Tag>
@@ -51,7 +51,7 @@ export function Apps() {
     <ScrollView contentContainerStyle={[s.page, { gap: 14 }]}>
       <H1 style={{ fontSize: 24, marginTop: 4 }}>Applications</H1>
       {a.apps.map((x, i) => (
-        <FadeIn key={x.id} delay={i * 70} style={[s.card, { gap: 10 }]}>
+        <FadeIn key={x.id} delay={i * 40} style={[s.card, { gap: 10 }]}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 8 }}>
             <Text style={{ fontSize: 16, fontWeight: '500', color: C.text, flex: 1 }}>{x.title}</Text>
             <Tag sev={x.sev}>{x.status}</Tag>
@@ -162,15 +162,89 @@ export function Wallet() {
 }
 
 /* ---------------- Passport ---------------- */
-function ScoreRing({ score }) {
-  const v = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    Animated.timing(v, { toValue: 1, duration: 900, easing: Easing.out(Easing.back(1.5)), useNativeDriver: ND }).start();
-  }, [v]);
+const ScoreRing = ({ score }) => (
+  <ProgressRing value={score / 100} size={56} stroke={5} color="#34A853" label={'Reliability score ' + score}>
+    <Text style={{ fontSize: 18, color: C.text }}>{score}</Text>
+  </ProgressRing>
+);
+
+// Profile completeness: each item is worth an equal share of the ring.
+const PROFILE = [
+  ['kyc', 'KYC', 'verified_user'],
+  ['bank', 'Bank / UPI', 'account_balance'],
+  ['photo', 'Profile photo', 'face'],
+  ['skills', 'Skills', 'construction'],
+  ['video', 'Intro video', 'videocam'],
+  ['police', 'Police verification', 'local_police'],
+  ['contact', 'Emergency contact', 'contact_phone'],
+  ['course', 'Food safety course', 'school'],
+];
+
+function Completeness() {
+  const a = useApp();
+  const done = a.profileDone.length;
+  const pct = done / PROFILE.length;
+  const todo = PROFILE.filter(p => !a.profileDone.includes(p[0]));
+  const add = id => {
+    animateNext();
+    a.setProfileDone(l => [...l, id]);
+    const n = done + 1;
+    a.say(n === PROFILE.length ? 'Profile complete! You now get shifts first.' : 'Added. Profile ' + Math.round((n / PROFILE.length) * 100) + '% complete.');
+  };
   return (
-    <Animated.View style={{ width: 56, height: 56, borderRadius: 28, borderWidth: 5, borderColor: '#34A853', alignItems: 'center', justifyContent: 'center', transform: [{ scale: v }, { rotate: v.interpolate({ inputRange: [0, 1], outputRange: ['-90deg', '0deg'] }) }] }}>
-      <Text style={{ fontSize: 18, color: C.text }}>{score}</Text>
-    </Animated.View>
+    <FadeIn delay={40} style={[s.card, { gap: 12 }]}>
+      <View style={{ flexDirection: 'row', gap: 16, alignItems: 'center' }}>
+        <ProgressRing value={pct} size={84} stroke={8} color={C.primary} label="Profile completeness">
+          <Text style={{ fontSize: 20, color: C.text }}>{Math.round(pct * 100)}%</Text>
+        </ProgressRing>
+        <View style={{ flex: 1, gap: 2 }}>
+          <Text style={{ fontSize: 16, fontWeight: '500', color: C.text }}>{todo.length ? 'Complete your profile' : 'Profile complete'}</Text>
+          <Text style={[s.meta, { lineHeight: 20 }]}>{todo.length ? 'Complete profiles get shifts first and 12% more offers.' : 'You get shifts before anyone else.'}</Text>
+        </View>
+      </View>
+      {todo.length > 0 && (
+        <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+          {todo.slice(0, 3).map(([id, l, i]) => (
+            <Tap key={id} style={[s.chip, { borderStyle: 'dashed' }]} onPress={() => add(id)} accessibilityLabel={'Add ' + l}>
+              <Icon name={i} size={18} color={C.primary} />
+              <Text style={{ fontSize: 14, color: C.text }}>{l}</Text>
+            </Tap>
+          ))}
+        </View>
+      )}
+    </FadeIn>
+  );
+}
+
+/** New badge: tap the locked card to flip it over in 3D; a shine sweeps across once. */
+function NewBadge() {
+  const a = useApp();
+  return (
+    <FadeIn delay={120} style={[s.card, { flexDirection: 'row', gap: 16, alignItems: 'center', backgroundColor: C.surface2, borderWidth: 0 }]}>
+      <BadgeFlip
+        width={96}
+        height={112}
+        unlocked={a.badgeOpen}
+        onUnlock={() => { a.setBadgeOpen(true); a.say('Badge unlocked: CrossWay Star · October'); }}
+        front={
+          <View style={{ flex: 1, backgroundColor: C.surface3, alignItems: 'center', justifyContent: 'center', gap: 4, borderWidth: 2, borderStyle: 'dashed', borderColor: C.outline, borderRadius: 24 }}>
+            <Icon name="lock" size={32} color={C.muted} />
+            <Text style={{ fontSize: 12, color: C.muted }}>Tap</Text>
+          </View>
+        }
+        back={
+          <View style={{ flex: 1, backgroundColor: '#FBBC04', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
+            <Icon name="star" size={44} color="#3B2A00" />
+            <Text style={{ fontSize: 12, fontWeight: '600', color: '#3B2A00' }}>STAR · OCT</Text>
+          </View>
+        }
+      />
+      <View style={{ flex: 1, gap: 4 }}>
+        <Text style={{ fontSize: 16, fontWeight: '500', color: C.text }}>{a.badgeOpen ? 'CrossWay Star · October' : 'You earned a new badge'}</Text>
+        <Text style={[s.meta, { lineHeight: 20 }]}>{a.badgeOpen ? '20 shifts this month with a 4.8★ average. Shown on your Passport.' : 'Tap the card to reveal it.'}</Text>
+      </View>
+      <SuccessBurst trigger={a.badgeOpen ? 1 : 0} style={{ left: 64, top: 64 }} />
+    </FadeIn>
   );
 }
 
@@ -202,7 +276,7 @@ export function Passport() {
         </View>
         <View style={{ flexDirection: 'row', gap: 8 }}>
           {stats.map(([v, l], i) => (
-            <FadeIn key={l} delay={100 + i * 70} style={{ flex: 1, backgroundColor: '#fff', borderRadius: 14, paddingVertical: 10, paddingHorizontal: 12 }}>
+            <FadeIn key={l} delay={100 + i * 40} style={{ flex: 1, backgroundColor: '#fff', borderRadius: 14, paddingVertical: 10, paddingHorizontal: 12 }}>
               <Text style={{ fontSize: 20, color: C.text }}>{v}</Text>
               <Text style={{ fontSize: 12, color: C.muted }}>{l}</Text>
             </FadeIn>
@@ -210,6 +284,8 @@ export function Passport() {
         </View>
         <Btn label="Share Passport link" icon="share" height={44} onPress={() => a.say('Link copied: crossway.in/p/ravi-2210 · valid 7 days')} />
       </FadeIn>
+      {work && <Completeness />}
+      {work && <NewBadge />}
       <Tap style={[s.card, { flexDirection: 'row', alignItems: 'center', gap: 14 }]} onPress={() => a.setSub('rel')}>
         <ScoreRing score={94} />
         <View style={{ flex: 1, gap: 2 }}>
@@ -221,7 +297,7 @@ export function Passport() {
       <Text style={s.h2}>Badges</Text>
       <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
         {badges.map(([i, l, sv], k) => (
-          <Pop key={l} delay={150 + k * 70}>
+          <Pop key={l} delay={150 + k * 40}>
             <View style={{ height: 36, paddingHorizontal: 14, borderRadius: 18, backgroundColor: T[sv][0], flexDirection: 'row', alignItems: 'center', gap: 6 }}>
               <Icon name={i} size={18} color={T[sv][1]} />
               <Text style={{ fontSize: 14, color: T[sv][1] }}>{l}</Text>

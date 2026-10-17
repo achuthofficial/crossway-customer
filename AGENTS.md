@@ -31,5 +31,8 @@ real routes, move to Expo Router (`src/app/`), following https://docs.expo.dev/r
 
 ## Animations
 
-Use the React Native `Animated` API and `LayoutAnimation` (via `animateNext()` in `src/store.js`). Shared animated
-building blocks live in `src/components/ui.js`. Pass `useNativeDriver: ND` so the web export keeps working.
+Use the motion library in `src/motion/` (TypeScript), which reads the spring tokens in `design-tokens/`:
+`const m = useMotion(); m.to(value, 1, { kind: 'spatial' | 'effects', speed: 'fast' | 'default' | 'slow' }).start()`.
+It uses the native driver where possible and falls back to fades when the OS reduce-motion setting is on. Animate only
+transform and opacity; bound every loop to under 5 s. `LayoutAnimation` (via `animateNext()` in `src/store.js`) is
+for list inserts and removals. Specs live in `docs/motion/`. Run `npm run typecheck` after changing `src/motion/`.

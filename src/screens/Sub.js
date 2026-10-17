@@ -1,22 +1,169 @@
 import { useEffect, useRef, useState } from 'react';
 import { Animated, ScrollView, Text, View } from 'react-native';
-import { FEED, SCENARIOS } from '../data';
+import { EXTRA_SHIFT, FEED, SCENARIOS } from '../data';
 import { animateNext, useApp } from '../store';
 import { C, T } from '../theme';
-import { Btn, FadeIn, Icon, Pop, Pulse, Tap } from '../components/ui';
-import { s } from './Home';
+import { Btn, FadeIn, Icon, Pop, Pulse, Tag, Tap } from '../components/ui';
+import { s, saveShift, shiftAction, ShiftHead, skipShift } from './Home';
+import { AnimatedCard, FlipList, Lottie, ReferralGraph, useMotion } from '../motion';
+import emptySaved from '../motion/lottie/empty-saved.json';
 
-const Header = ({ title }) => {
+const Header = ({ title, right }) => {
   const a = useApp();
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingTop: 8, paddingHorizontal: 8 }}>
-      <Tap style={{ width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' }} onPress={() => a.setSub(null)} accessibilityLabel="Back">
+      <Tap style={{ width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' }} onPress={a.back} accessibilityLabel="Back">
         <Icon name="arrow_back" />
       </Tap>
-      <Text style={{ fontSize: 20, color: C.text }}>{title}</Text>
+      <Text style={{ fontSize: 20, color: C.text, flex: 1 }}>{title}</Text>
+      {right}
     </View>
   );
 };
+
+const findShift = (a, id) => a.feed.find(f => f.id === id) || (EXTRA_SHIFT.id === id ? EXTRA_SHIFT : null);
+
+/* ---------------- Job detail (opened with a container transform from the feed card) ---------------- */
+export function JobDetail() {
+  const a = useApp();
+  const x = findShift(a, a.jobId);
+  if (!x) return null;
+  const { warn, wfg, cta, bicon, dis, bg, fg, press } = shiftAction(a, x);
+  const isSaved = a.saved.includes(x.id);
+  const facts = [
+    ['schedule', 'Shift', x.when],
+    ['payments', 'Pay', x.pay + ' · paid the next day to UPI'],
+    ['near_me', 'Distance', x.dist + ' from Indiranagar'],
+    ['checkroom', 'Dress code', 'Black trousers, closed shoes. Uniform shirt given on site.'],
+    ['support_agent', 'On site', 'Supervisor shared after you accept · masked calls'],
+  ];
+  return (
+    <ScrollView contentContainerStyle={{ gap: 14, paddingBottom: 24 }}>
+      <Header
+        title="Shift details"
+        right={
+          <Tap style={{ width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' }} scaleTo={0.85} onPress={() => (isSaved ? a.setSaved(l => l.filter(i => i !== x.id)) : saveShift(a, x))} accessibilityLabel={isSaved ? 'Remove from saved' : 'Save for later'}>
+            <Icon name={isSaved ? 'bookmark' : 'bookmark_border'} color={isSaved ? C.primary : C.muted} />
+          </Tap>
+        }
+      />
+      <FadeIn style={{ paddingHorizontal: 16, gap: 12 }}>
+        <ShiftHead x={x} big />
+        <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+          {x.tags.map(([ic, l, sv]) => <Tag key={l} sev={sv} icon={ic}>{l}</Tag>)}
+        </View>
+        {!!warn && <Text style={{ fontSize: 14, color: wfg, lineHeight: 20 }}>{warn}</Text>}
+      </FadeIn>
+      <View style={{ paddingHorizontal: 16, gap: 4 }}>
+        {facts.map(([i, k, v], n) => (
+          <AnimatedCard key={k} index={n + 1} style={{ flexDirection: 'row', gap: 14, alignItems: 'center', paddingVertical: 10 }}>
+            <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: C.surface2, alignItems: 'center', justifyContent: 'center' }}>
+              <Icon name={i} size={20} color={C.primary} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 12, color: C.muted }}>{k}</Text>
+              <Text style={{ fontSize: 15, color: C.text, lineHeight: 21 }}>{v}</Text>
+            </View>
+          </AnimatedCard>
+        ))}
+      </View>
+      <View style={{ paddingHorizontal: 16, gap: 8 }}>
+        <Btn label={cta} icon={bicon} bg={bg} fg={fg} disabled={dis} onPress={dis ? undefined : press} />
+        <Btn label="Not interested" icon="close" kind="o" height={48} onPress={() => { skipShift(a, x); a.setSub(null); }} />
+      </View>
+    </ScrollView>
+  );
+}
+
+/* ---------------- Saved shifts ---------------- */
+export function Saved() {
+  const a = useApp();
+  const list = a.saved.map(id => findShift(a, id)).filter(x => x && !x.taken);
+  return (
+    <ScrollView contentContainerStyle={{ gap: 12, paddingBottom: 24 }}>
+      <Header title="Saved shifts" />
+      {!list.length && (
+        <FadeIn style={{ alignItems: 'center', gap: 8, padding: 24 }}>
+          <Lottie source={emptySaved} size={150} accessibilityLabel="Bookmark" />
+          <Text style={{ fontSize: 17, color: C.text }}>Nothing saved yet</Text>
+          <Text style={[s.meta, { textAlign: 'center', lineHeight: 20 }]}>Swipe a shift card right, or tap its bookmark, to keep it here for later.</Text>
+        </FadeIn>
+      )}
+      <View style={{ paddingHorizontal: 16, gap: 10 }}>
+        {list.map((x, i) => {
+          const { cta, bicon, dis, bg, fg, press } = shiftAction(a, x);
+          return (
+            <AnimatedCard key={x.id} index={i} style={[s.card, { gap: 10 }]}>
+              <ShiftHead x={x} />
+              <View style={{ flexDirection: 'row', gap: 8 }}>
+                <Btn label={cta} icon={bicon} height={44} bg={bg} fg={fg} full={false} style={{ flex: 1 }} disabled={dis} onPress={dis ? undefined : press} />
+                <Btn label="Remove" kind="o" height={44} full={false} onPress={() => { animateNext(); a.setSaved(l => l.filter(id => id !== x.id)); }} />
+              </View>
+            </AnimatedCard>
+          );
+        })}
+      </View>
+    </ScrollView>
+  );
+}
+
+/* ---------------- Refer and earn: network graph + leaderboard ---------------- */
+const NETWORK = [
+  { id: 'you', label: 'Ravi Kumar', x: 0.5, y: 0.42, color: '#0B57D0' },
+  { id: 'su', label: 'Suresh M.', x: 0.17, y: 0.2, color: '#34A853', parent: 'you' },
+  { id: 'ma', label: 'Manoj K.', x: 0.84, y: 0.22, color: '#F9AB00', parent: 'you' },
+  { id: 'an', label: 'Anita R.', x: 0.2, y: 0.75, color: '#34A853', parent: 'su' },
+  { id: 'jo', label: 'Joseph D.', x: 0.78, y: 0.76, color: '#A8C7FA', parent: 'you' },
+];
+const BOARD = [['Priya S.', 6], ['Imran K.', 4], ['Deepa N.', 3], ['Ravi Kumar', 2, true], ['Kiran B.', 1]];
+
+export function Refer() {
+  const a = useApp();
+  const rows = BOARD.map(([name, n, me]) => ({ name, n: me ? a.refs : n, me: !!me })).sort((p, q) => q.n - p.n || (p.me ? -1 : 1));
+  const nodes = a.refs > 2 ? [...NETWORK, { id: 'ne', label: 'New friend', x: 0.5, y: 0.9, color: '#EA4335', parent: 'you' }] : NETWORK;
+  return (
+    <ScrollView contentContainerStyle={{ gap: 14, paddingBottom: 24 }}>
+      <Header title="Refer and earn" />
+      <FadeIn style={{ marginHorizontal: 16, padding: 18, borderRadius: 24, backgroundColor: T.ok[0], gap: 6 }}>
+        <Text style={{ fontSize: 13, color: T.ok[1] }}>Your code</Text>
+        <Text style={{ fontSize: 30, lineHeight: 38, color: T.ok[1] }}>RAVI2210</Text>
+        <Text style={{ fontSize: 14, lineHeight: 20, color: T.ok[1] }}>Friends who sign up with your code and finish their first shift earn you ₹300. Pro referrals pay ₹5,000 after 30 days in the job.</Text>
+      </FadeIn>
+      <View style={{ marginHorizontal: 16, borderRadius: 24, backgroundColor: C.surface2, paddingVertical: 8 }}>
+        <Text style={{ fontSize: 13, color: C.muted, paddingHorizontal: 16, paddingTop: 6 }}>Your network · {nodes.length - 1} people</Text>
+        <ReferralGraph nodes={nodes} height={230} />
+      </View>
+      <View style={{ paddingHorizontal: 16, gap: 8 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <Text style={[s.h2, { flex: 1 }]}>Top referrers this week</Text>
+          <Text style={s.meta}>Indiranagar</Text>
+        </View>
+        <FlipList
+          items={rows}
+          keyOf={r => r.name}
+          rowHeight={56}
+          renderRow={(r, i) => (
+            <View style={{ height: 52, flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 14, borderRadius: 16, backgroundColor: r.me ? C.primarySoft : '#fff', borderWidth: r.me ? 0 : 1, borderColor: C.line }}>
+              <Text style={{ width: 22, fontSize: 16, color: i < 3 ? C.primary : C.muted, fontWeight: '600' }}>{i + 1}</Text>
+              <Text style={{ flex: 1, fontSize: 15, color: C.text, fontWeight: r.me ? '600' : '400' }}>{r.me ? 'You' : r.name}</Text>
+              <Text style={{ fontSize: 15, color: C.text }}>{r.n}</Text>
+            </View>
+          )}
+        />
+      </View>
+      <View style={{ paddingHorizontal: 16, gap: 8 }}>
+        <Btn label="Share on WhatsApp" icon="share" onPress={() => a.say('WhatsApp opened with your invite link.')} />
+        <Btn
+          label="Simulate: a friend joins"
+          icon="person_add"
+          kind="o"
+          height={48}
+          onPress={() => { a.setRefs(n => n + 1); a.say('A friend finished their first shift. +₹300'); }}
+        />
+      </View>
+    </ScrollView>
+  );
+}
 
 /* ---------------- Shift day (check-in / check-out) ---------------- */
 const STAGES = {
@@ -128,17 +275,6 @@ function pages(a) {
   const tone = rows => rows.map(([i, l, sub, sv]) => ({ i, l, s: sub, bg: T[sv][0], ic: T[sv][1] }));
   const act = rows => rows.map(([i, l, sub, label, danger]) => ({ i, l, s: sub, bg: C.surface2, ic: danger ? C.danger : C.primary, act: label }));
   return {
-    refer: {
-      title: 'Refer and earn',
-      hero: [T.ok, 'Your code', 'RAVI2210', 'Friends who sign up with your code and finish their first shift earn you ₹300. Pro referrals pay ₹5,000 after 30 days in the job.'],
-      rows: tone([
-        ['person', 'Suresh M.', 'Signed up 12 Oct · first shift done · +₹300 paid', 'ok'],
-        ['person', 'Manoj K.', 'Signed up 15 Oct · no shift yet · Pending', 'warn'],
-        ['person', 'Lakshmi D.', 'Already on CrossWay before your invite · Not eligible', 'mute'],
-        ['local_fire_department', 'Streak bonus', 'Refer 3 reliable workers this month: +₹500 · 1 of 3', 'info'],
-      ]),
-      cta: ['Share on WhatsApp', () => a.say('WhatsApp opened with your invite link.')],
-    },
     help: {
       title: 'Help and complaints',
       rows: act([
@@ -195,7 +331,7 @@ export function InfoPage() {
       )}
       <View style={{ paddingHorizontal: 16, gap: 8 }}>
         {p.rows.map((r, i) => (
-          <FadeIn key={r.l} delay={80 + i * 60} style={{ flexDirection: 'row', gap: 14, alignItems: 'center', paddingVertical: 12, paddingHorizontal: 14, borderRadius: 16, backgroundColor: r.bg }}>
+          <FadeIn key={r.l} delay={80 + i * 40} style={{ flexDirection: 'row', gap: 14, alignItems: 'center', paddingVertical: 12, paddingHorizontal: 14, borderRadius: 16, backgroundColor: r.bg }}>
             <Icon name={r.i} color={r.ic} />
             <View style={{ flex: 1, gap: 2 }}>
               <Text style={{ fontSize: 15, color: C.text }}>{r.l}</Text>
@@ -280,7 +416,7 @@ export function Demo() {
       </View>
       <View style={{ paddingHorizontal: 8 }}>
         {list.map(([mod, l, on], i) => (
-          <FadeIn key={l} delay={Math.min(i, 12) * 25}>
+          <FadeIn key={l} delay={Math.min(i, 8) * 30}>
             <Tap scaleTo={0.98} style={{ flexDirection: 'row', gap: 10, alignItems: 'flex-start', paddingVertical: 10, paddingHorizontal: 10, borderRadius: 12 }} onPress={on}>
               <View style={{ paddingHorizontal: 7, paddingVertical: 3, borderRadius: 6, backgroundColor: C.primarySoft, marginTop: 1 }}>
                 <Text style={{ fontSize: 11, fontWeight: '600', color: C.primaryDark }}>{mod}</Text>

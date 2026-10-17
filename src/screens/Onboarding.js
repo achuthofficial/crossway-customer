@@ -220,7 +220,7 @@ export function Kyc() {
           <Text style={s.sub}>We use DigiLocker to read your Aadhaar. CrossWay keeps only the last 4 digits.</Text>
           <View style={s.checks}>
             {[['check', C.green, 'Name, date of birth, photo'], ['check', C.green, 'Address (for nearby shifts)'], ['close', C.danger, 'Never your full Aadhaar number']].map(([i, c, l], k) => (
-              <FadeIn key={l} delay={k * 80} style={{ flexDirection: 'row', gap: 10 }}>
+              <FadeIn key={l} delay={k * 40} style={{ flexDirection: 'row', gap: 10 }}>
                 <Icon name={i} color={c} /><Text style={{ fontSize: 14, color: C.text }}>{l}</Text>
               </FadeIn>
             ))}
@@ -267,13 +267,14 @@ export function Selfie() {
   const a = useApp();
   const scan = useRef(new Animated.Value(0)).current;
   useEffect(() => {
-    const loop = Animated.loop(Animated.sequence([
+    // One down-and-up pass (2.8 s), then the line rests: auto-play stays under 5 s.
+    const pass = Animated.sequence([
       Animated.timing(scan, { toValue: 1, duration: 1400, easing: Easing.inOut(Easing.ease), useNativeDriver: ND }),
       Animated.timing(scan, { toValue: 0, duration: 1400, easing: Easing.inOut(Easing.ease), useNativeDriver: ND }),
-    ]));
-    loop.start();
-    return () => loop.stop();
-  }, [scan]);
+    ]);
+    pass.start();
+    return () => pass.stop();
+  }, [scan, a.selfieTries]);
   const human = a.selfieTries >= 3;
   const take = () => {
     if (a.sc.selfie === 'fail') {

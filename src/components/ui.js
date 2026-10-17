@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
-import { Animated, Easing, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useRef } from 'react';
+import { Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { C, T } from '../theme';
+import { ND, ShapeMorph, useMotion } from '../motion';
 
-export const ND = Platform.OS !== 'web'; // useNativeDriver is unsupported on web
+export { ND, CountUp } from '../motion'; // useNativeDriver is unsupported on web
 
 // Material Symbols names from the design that MaterialIcons spells differently.
 const ALIAS = { person_alert: 'person-search', shield_person: 'security' };
@@ -14,8 +15,9 @@ export function Icon({ name, size = 22, color = C.text, style }) {
 
 /** Pressable that springs down slightly on press. */
 export function Tap({ onPress, disabled, style, children, scaleTo = 0.96, accessibilityLabel }) {
+  const m = useMotion();
   const s = useRef(new Animated.Value(1)).current;
-  const to = v => Animated.spring(s, { toValue: v, useNativeDriver: ND, speed: 40, bounciness: 6 }).start();
+  const to = v => m.to(s, v, { speed: 'fast' }).start();
   // Layout props must live on the Pressable so the touch target takes the space, not just the visual.
   const flat = StyleSheet.flatten(style) || {};
   const outer = {};
@@ -75,36 +77,49 @@ export const Tag = ({ sev, children, icon }) => (
   </View>
 );
 
-/** Fades and slides children in on mount; `delay` staggers lists. */
+/**
+ * Rises and fades in on mount with token springs (spatial for the rise, effects for the fade).
+ * `delay` staggers lists; keep it to 30–50 ms steps, capped at 8 items.
+ */
 export function FadeIn({ delay = 0, from = 14, style, children }) {
+  const m = useMotion();
   const v = useRef(new Animated.Value(0)).current;
+  const o = useRef(new Animated.Value(0)).current;
   useEffect(() => {
-    Animated.timing(v, { toValue: 1, duration: 320, delay, easing: Easing.out(Easing.cubic), useNativeDriver: ND }).start();
+    m.to(v, 1, { delay }).start();
+    m.to(o, 1, { kind: 'effects', delay }).start();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   return (
-    <Animated.View style={[style, { opacity: v, transform: [{ translateY: v.interpolate({ inputRange: [0, 1], outputRange: [from, 0] }) }] }]}>
+    <Animated.View style={[style, { opacity: o, transform: m.reduced ? [] : [{ translateY: v.interpolate({ inputRange: [0, 1], outputRange: [from, 0] }) }] }]}>
       {children}
     </Animated.View>
   );
 }
 
-/** Pops in with a springy scale; good for success icons. */
+/** Pops in with the expressive fast spring (slight overshoot); good for success icons. */
 export function Pop({ delay = 0, children, style }) {
-  const v = useRef(new Animated.Value(0)).current;
+  const m = useMotion();
+  const v = useRef(new Animated.Value(m.reduced ? 1 : 0)).current;
   useEffect(() => {
-    Animated.spring(v, { toValue: 1, delay, useNativeDriver: ND, speed: 12, bounciness: 14 }).start();
+    m.to(v, 1, { delay, speed: 'fast' }).start();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   return <Animated.View style={[style, { transform: [{ scale: v }] }]}>{children}</Animated.View>;
 }
 
-/** Infinite expanding ring behind a circle, e.g. a live dot or mic. */
-export function Pulse({ size, color, style }) {
+/**
+ * Expanding ring behind a circle, e.g. a live dot or mic. Runs 3 times (4.8 s) and stops,
+ * staying under the 5 s auto-play limit; pass `iterations` to change. Off with reduced motion.
+ */
+export function Pulse({ size, color, style, iterations = 3 }) {
+  const m = useMotion();
   const v = useRef(new Animated.Value(0)).current;
   useEffect(() => {
-    const loop = Animated.loop(Animated.timing(v, { toValue: 1, duration: 1600, easing: Easing.out(Easing.ease), useNativeDriver: ND }));
-    loop.start();
+    if (m.reduced) return;
+    v.setValue(0);
+    const loop = Animated.loop(Animated.timing(v, { toValue: 1, duration: 1600, easing: Easing.out(Easing.ease), useNativeDriver: ND }), { iterations });
+    loop.start(() => v.setValue(1));
     return () => loop.stop();
-  }, [v]);
+  }, [v, iterations, m.reduced]);
   return (
     <Animated.View
       pointerEvents="none"
@@ -117,27 +132,18 @@ export function Pulse({ size, color, style }) {
   );
 }
 
-/** Rotating icon used for loading states. */
-export function Spin({ name = 'autorenew', size = 40, color = C.primary }) {
-  const v = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    const loop = Animated.loop(Animated.timing(v, { toValue: 1, duration: 1000, easing: Easing.linear, useNativeDriver: ND }));
-    loop.start();
-    return () => loop.stop();
-  }, [v]);
-  return (
-    <Animated.View style={{ transform: [{ rotate: v.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] }) }] }}>
-      <Icon name={name} size={size} color={color} />
-    </Animated.View>
-  );
+/** Loading indicator: the M3 Expressive shape morph (cookie → clover → pill → burst → squircle). */
+export function Spin({ size = 40, color = C.primary }) {
+  return <ShapeMorph size={size} color={color} />;
 }
 
 /** Material-style switch with an animated knob. */
 export function Switch({ value, onChange, label }) {
+  const m = useMotion();
   const v = useRef(new Animated.Value(value ? 1 : 0)).current;
   useEffect(() => {
-    Animated.spring(v, { toValue: value ? 1 : 0, useNativeDriver: false, speed: 20, bounciness: 8 }).start();
-  }, [value, v]);
+    m.to(v, value ? 1 : 0, { speed: 'fast', native: false }).start();
+  }, [value, v]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <Pressable onPress={onChange} accessibilityRole="switch" accessibilityState={{ checked: value }} accessibilityLabel={label}>
       <Animated.View
@@ -161,29 +167,18 @@ export function Switch({ value, onChange, label }) {
   );
 }
 
-/** Thin progress bar whose fill animates to `pct` (0–1). */
+/** Thin progress bar whose fill springs to `pct` (0–1). Animates scaleX from the left: transform only. */
 export function Bar({ pct, color = C.primary, height = 4, style }) {
+  const m = useMotion();
   const v = useRef(new Animated.Value(0)).current;
   useEffect(() => {
-    Animated.timing(v, { toValue: pct, duration: 600, easing: Easing.out(Easing.cubic), useNativeDriver: false }).start();
-  }, [pct, v]);
+    m.to(v, pct, { speed: 'slow' }).start();
+  }, [pct, v]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <View style={[{ flex: 1, height, borderRadius: height / 2, backgroundColor: '#E1E3E1', overflow: 'hidden' }, style]}>
-      <Animated.View style={{ height: '100%', backgroundColor: color, width: v.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }) }} />
+      <Animated.View style={{ height: '100%', width: '100%', backgroundColor: color, transformOrigin: 'left', transform: [{ scaleX: v }] }} />
     </View>
   );
-}
-
-/** Animates a number change, rendering it with `format`. */
-export function CountUp({ value, format = String, style }) {
-  const v = useRef(new Animated.Value(value)).current;
-  const [shown, setShown] = useState(value);
-  useEffect(() => {
-    const id = v.addListener(({ value: x }) => setShown(x));
-    Animated.timing(v, { toValue: value, duration: 700, easing: Easing.out(Easing.cubic), useNativeDriver: false }).start();
-    return () => v.removeListener(id);
-  }, [value, v]);
-  return <Text style={style}>{format(shown)}</Text>;
 }
 
 export const H1 = ({ children, style }) => <Text style={[styles.h1, style]}>{children}</Text>;
